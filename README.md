@@ -181,9 +181,17 @@ sudo nginx -t && sudo nginx -s reload
 
 ## Compatibilidad
 
-- **Nginx**: 1.18+ (probado con 1.27 y 1.29)
-- **iLO**: iLO 5 (versión 3.x)
-- **Servidores**: HPE ProLiant Gen10/Gen10+
+### Probado con:
+
+| Componente | Versión |
+|------------|---------|
+| **Nginx** | 1.27.0, 1.29.4 |
+| **iLO 4** | 2.82 |
+| **iLO 5** | 3.17 |
+
+### Servidores compatibles:
+- HPE ProLiant Gen8/Gen9 (iLO 4)
+- HPE ProLiant Gen10/Gen10+ (iLO 5)
 
 ## Troubleshooting
 
