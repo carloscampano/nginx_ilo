@@ -1,0 +1,118 @@
+# Configuración de Nginx Reverse Proxy para HP iLO 5
+#
+# Cambiar los siguientes valores:
+#   - ilo.dominio.com  → tu dominio público
+#   - 192.168.13.10    → IP interna de tu iLO
+#
+# Copiar a: /etc/nginx/sites-available/ilo
+# Habilitar: ln -s /etc/nginx/sites-available/ilo /etc/nginx/sites-enabled/
+
+server {
+    server_name ilo.dominio.com;
+
+    error_log /var/log/nginx/ilo-443-error.log;
+    access_log /var/log/nginx/ilo-443-access.log;
+
+    # ============================================================
+    # Configuración SSL para backend iLO (certificado autofirmado)
+    # ============================================================
+    proxy_ssl_verify off;
+    proxy_ssl_server_name off;
+    proxy_ssl_protocols TLSv1.2 TLSv1.3;
+
+    # ============================================================
+    # WebSocket para consola remota HTML5 iLO
+    # Ruta: /wss/ircport
+    # ============================================================
+    location ^~ /wss/ {
+        proxy_pass https://192.168.13.10;
+        proxy_http_version 1.1;
+
+        # Headers WebSocket
+        # IMPORTANTE: $connection_upgrade debe ser "Upgrade" con U mayúscula
+        # Esto se define en el map de nginx.conf
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Host del backend (IP del iLO)
+        proxy_set_header Host $proxy_host;
+
+        # Pasar todos los headers sin modificar (cookies de sesión, etc.)
+        proxy_pass_request_headers on;
+
+        # Timeouts largos para sesiones de consola
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+        proxy_connect_timeout 60s;
+
+        # Deshabilitar buffering para WebSocket
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_request_buffering off;
+
+        # No reutilizar sesiones SSL con el backend
+        proxy_ssl_session_reuse off;
+    }
+
+    # ============================================================
+    # Resto del tráfico HTTP/HTTPS
+    # ============================================================
+    location / {
+        proxy_pass https://192.168.13.10;
+        proxy_http_version 1.1;
+
+        # Soporte WebSocket para otras rutas
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Headers estándar
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Reescribir cookies del iLO para el dominio del proxy
+        proxy_cookie_domain 192.168.13.10 ilo.dominio.com;
+        proxy_cookie_path / /;
+
+        # Sin buffering y sin límite de tamaño (para uploads de firmware)
+        proxy_buffering off;
+        client_max_body_size 0;
+
+        # Timeouts largos
+        proxy_connect_timeout 3600s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        send_timeout 3600s;
+    }
+
+    # ============================================================
+    # Let's Encrypt / Certbot
+    # ============================================================
+    location /.well-known/acme-challenge/ {
+        root /usr/share/nginx/html;
+    }
+
+    # ============================================================
+    # SSL - Gestionado por Certbot
+    # Ejecutar: sudo certbot --nginx -d ilo.dominio.com
+    # ============================================================
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/ilo.dominio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ilo.dominio.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+# ============================================================
+# Redirección HTTP → HTTPS
+# ============================================================
+server {
+    if ($host = ilo.dominio.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    server_name ilo.dominio.com;
+    listen 80;
+    return 404;
+}

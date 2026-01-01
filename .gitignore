@@ -1,0 +1,12 @@
+# Archivos de sistema
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Backups
+*.backup
+*.bak
